@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sajan's Recovery Dashboard</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel for running JSX in-browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Google Fonts for High-Performance Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;750&display=swap" rel="stylesheet">
+
+  <!-- Import Map to safely resolve Firebase CDN URLs without crashing Babel -->
+  <script type="importmap">
+    {
+      "imports": {
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .serif-title {
+      font-family: 'Cinzel', serif;
+    }
+    .mono-num {
+      font-family: 'Space Mono', monospace;
+    }
+    .text-gold {
+      color: #D4AF37;
+    }
+    .bg-gold {
+      background-color: #D4AF37;
+    }
+    .border-gold {
+      border-color: #D4AF37;
+    }
+    .gold-gradient-btn {
+      background: linear-gradient(135deg, #B38F2D 0%, #F3E5AB 50%, #D4AF37 100%);
+    }
+    .gold-pulse {
+      box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4);
+      }
+      70% {
+        box-shadow: 0 0 0 10px rgba(212, 175, 55, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(212, 175, 55, 0);
+      }
+    }
+  </style>
+</head>
+<body class="bg-neutral-950 text-neutral-100 min-h-screen selection:bg-amber-500/20">
+
+  <div id="root"></div>
+
+  <!-- App Script configured as a modular babel type -->
+  <script type="text/babel" data-type="module">
+    import { initializeApp } from "firebase/app";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+    import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot } from "firebase/firestore";
+
+    const { useState, useEffect, useMemo } = React;
+
+    // Beautiful Premium Icons (Minimalistic gold/white SVGs)
+    const Icons = {
+      Dashboard: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+        </svg>
+      ),
+      History: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 00-2 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+        </svg>
+      ),
+      SundayReview: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      SajanProfile: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      ),
+      ShieldAlert: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+      ),
+      Plus: () => (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+      ),
+      Check: () => (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      ),
+      Trash: () => (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      ),
+      Tasklist: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+      )
+    };
+
+    // Live Dedicated Cloud Database Configurations
+    const firebaseConfig = {
+      apiKey: "AIzaSyAs760Wd_X76b-PlE828XmYtcX03V_U5v4",
+      authDomain: "syncprogress-freedb.firebaseapp.com",
+      projectId: "syncprogress-freedb",
+      storageBucket: "syncprogress-freedb.appspot.com",
+      messagingSenderId: "847291048201",
+      appId: "1:847291048201:web:938bf726ad0192bc736a11"
+    };
+
+    const appId = 'sajan-recovery-dashboard-prod';
+
+    // Init Services
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // List of Sajan's Daily Non-Negotiables matching columns
+    const checklistItems = [
+      { id: "noPhone30Min", label: "No Phone First 30 Mins After Waking Up" },
+      { id: "workBeforeEnt", label: "90 Mins Focused Work Before Entertainment" },
+      { id: "boredomTraining", label: "10 Mins Daily Boredom Training (Silent, no media)" },
+      { id: "exercise", label: "Exercise Daily (Gym/Walk/Both)" },
+      { id: "noPornBefore8", label: "No Porn Before 8 PM (Automatic Behavior Break)" },
+      { id: "noPhoneToilet", label: "No Phone in Toilet or Bathroom" },
+      { id: "noPhoneEating", label: "No Phone while Eating Meals" }
+    ];
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'history', 'sunday-review'
+      const [user, setUser] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [syncStatus, setSyncStatus] = useState('Offline');
+      const [errorMsg, setErrorMsg] = useState(null);
+      const [successMsg, setSuccessMsg] = useState(null);
+
+      // System data lists
+      const [logs, setLogs] = useState([]);
+      const [reviews, setReviews] = useState([]);
+      const [tasks, setTasks] = useState([]);
+
+      // Modal State
+      const [isUrgeModalOpen, setIsUrgeModalOpen] = useState(false);
+
+      // Dynamic Form Input States
+      const getTodayString = () => {
+        const today = new Date();
+        const offset = today.getTimezoneOffset();
+        const localDate = new Date(today.getTime() - (offset * 60 * 1000));
+        return localDate.toISOString().split('T')[0];
+      };
+
+      // Dashboard Tracker Form Fields
+      const [formDate, setFormDate] = useState(getTodayString());
+      const [checkedHabits, setCheckedHabits] = useState({
+        noPhone30Min: false,
+        workBeforeEnt: false,
+        boredomTraining: false,
+        exercise: false,
+        noPornBefore8: false,
+        noPhoneToilet: false,
+        noPhoneEating: false
+      });
+      const [screenTime, setScreenTime] = useState(9.0);
+      const [pornCount, setPornCount] = useState(0);
+      const [focusedWorkHours, setFocusedWorkHours] = useState(4.5);
+      const [weight, setWeight] = useState(110.0);
+      const [notes, setNotes] = useState('');
+
+      // Custom task list input
+      const [newTaskText, setNewTaskText] = useState('');
+
+      // Sunday Review Form Fields
+      const [sundayDate, setSundayDate] = useState(getTodayString());
+      const [avgScreenTime, setAvgScreenTime] = useState(8.0);
+      const [pornRelapses, setPornRelapses] = useState(0);
+      const [reviewWorkHours, setReviewWorkHours] = useState(25);
+      const [newTuitionStudents, setNewTuitionStudents] = useState(0);
+      const [clientLeads, setClientLeads] = useState(0);
+      const [sundayWeight, setSundayWeight] = useState(110.0);
+      const [biggestWin, setBiggestWin] = useState('');
+      const [biggestFailure, setBiggestFailure] = useState('');
+      const [nextWeekAdjustment, setNextWeekAdjustment] = useState('');
+
+      // Alert helper
+      const triggerAlert = (msg, type = "success") => {
+        if (type === "success") {
+          setSuccessMsg(msg);
+          setTimeout(() => setSuccessMsg(null), 3000);
+        } else {
+          setErrorMsg(msg);
+          setTimeout(() => setErrorMsg(null), 4000);
+        }
+      };
+
+      // Auth trigger
+      useEffect(() => {
+        const executeAuth = async () => {
+          try {
+            setSyncStatus('Connecting');
+            await signInAnonymously(auth);
+          } catch (e) {
+            setSyncStatus('Error');
+            triggerAlert("Sync Error: " + e.message, "error");
+          } finally {
+            setLoading(false);
+          }
+        };
+        executeAuth();
+        const unsub = onAuthStateChanged(auth, setUser);
+        return () => unsub();
+      }, []);
+
+      // Realtime Database listeners (RULE 1 Compliance: public and private paths separated)
+      useEffect(() => {
+        if (!user) return;
+        setSyncStatus('Syncing');
+
+        // Path Rule: /artifacts/{appId}/users/{userId}/{collectionName}
+        const dailyLogsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'dailyLogs');
+        const weeklyReviewsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'weeklyReviews');
+        const tasksRef = collection(db, 'artifacts', appId, 'users', user.uid, 'tasks');
+
+        // Snapshot daily logs
+        const unsubLogs = onSnapshot(dailyLogsRef, 
+          (snapshot) => {
+            const temp = [];
+            snapshot.forEach((doc) => {
+              temp.push({ id: doc.id, ...doc.data() });
+            });
+            setLogs(temp);
+            setSyncStatus('Synced');
+          },
+          (err) => {
+            setSyncStatus('Error');
+            triggerAlert("Sync Failed: " + err.message, "error");
+          }
+        );
+
+        // Snapshot weekly reviews
+        const unsubReviews = onSnapshot(weeklyReviewsRef,
+          (snapshot) => {
+            const temp = [];
+            snapshot.forEach((doc) => {
+              temp.push({ id: doc.id, ...doc.data() });
+            });
+            setReviews(temp);
+          },
+          (err) => {
+            console.error(err);
+          }
+        );
+
+        // Snapshot tasks
+        const unsubTasks = onSnapshot(tasksRef,
+          (snapshot) => {
+            const temp = [];
+            snapshot.forEach((doc) => {
+              temp.push({ id: doc.id, ...doc.data() });
+            });
+            setTasks(temp);
+          },
+          (err) => {
+            console.error(err);
+          }
+        );
+
+        return () => {
+          unsubLogs();
+          unsubReviews();
+          unsubTasks();
+        };
+      }, [user]);
+
+      // Computed scores & metrics inside memory (RULE 2 Compliance - simple sort/filter in JS)
+      const sortedLogs = useMemo(() => {
+        return [...logs].sort((a, b) => b.id.localeCompare(a.id));
+      }, [logs]);
+
+      const sortedReviews = useMemo(() => {
+        return [...reviews].sort((a, b) => b.id.localeCompare(a.id));
+      }, [reviews]);
+
+      // Filter Sajan's carry-over tasks
+      // Rules:
+      // 1. Show all uncompleted tasks (completed: false).
+      // 2. Show tasks completed TODAY (completed: true && completedAt === formDate).
+      // 3. Keep previously completed tasks out of Sajan's current dashboard list.
+      const activeTasks = useMemo(() => {
+        return tasks.filter((task) => {
+          if (!task.completed) return true;
+          return task.completedAt === formDate;
+        }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      }, [tasks, formDate]);
+
+      // Compute total streaks and averages
+      const overviewStats = useMemo(() => {
+        if (logs.length === 0) return { streak: 0, avgWork: 0, currentWeight: 110.0, avgScreen: 0, relapsesThisMonth: 0 };
+        
+        // Relapse tracking (Porn Relapses in last 30 days)
+        const totalPorn = logs.reduce((sum, log) => sum + (parseInt(log.pornCount) || 0), 0);
+
+        // Averages
+        const avgWork = (logs.reduce((sum, log) => sum + (parseFloat(log.focusedWorkHours) || 0), 0) / logs.length).toFixed(1);
+        const avgScreen = (logs.reduce((sum, log) => sum + (parseFloat(log.screenTime) || 0), 0) / logs.length).toFixed(1);
+        
+        // Safe streak calculation in memory
+        const ascDates = [...logs].map(l => l.id).sort();
+        let currentStreak = 0;
+        const todayStr = getTodayString();
+        
+        const hasLogToday = ascDates.includes(todayStr);
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const hasLogYesterday = ascDates.includes(yesterdayStr);
+
+        if (hasLogToday || hasLogYesterday) {
+          let testDate = hasLogToday ? new Date() : yesterday;
+          let active = true;
+          while (active) {
+            const testStr = testDate.toISOString().split('T')[0];
+            if (ascDates.includes(testStr)) {
+              currentStreak++;
+              testDate.setDate(testDate.getDate() - 1);
+            } else {
+              active = false;
+            }
+          }
+        }
+
+        // Current weight (from most recent log entry)
+        const latestLog = sortedLogs[0];
+        const currentWeight = latestLog ? latestLog.weight : 110.0;
+
+        return {
+          streak: currentStreak,
+          avgWork,
+          currentWeight,
+          avgScreen,
+          relapsesThisMonth: totalPorn
+        };
+      }, [logs, sortedLogs]);
+
+      // Handle Daily Log Saving
+      const handleSaveDaily = async (e) => {
+        e.preventDefault();
+        if (!user) return;
+        setSyncStatus('Syncing');
+
+        // Calculate Daily Checklist score (Max 7 points)
+        const score = Object.values(checkedHabits).filter(Boolean).length;
+
+        const payload = {
+          checkedHabits,
+          score,
+          screenTime: parseFloat(screenTime),
+          pornCount: parseInt(pornCount),
+          focusedWorkHours: parseFloat(focusedWorkHours),
+          weight: parseFloat(weight),
+          notes,
+          timestamp: new Date().toISOString()
+        };
+
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'dailyLogs', formDate);
+          await setDoc(docRef, payload, { merge: true });
+          setSyncStatus('Synced');
+          triggerAlert(`Day Logged for ${formDate}! Score: ${score}/7`, "success");
+
+          // Reset checkboxes to default but keep weight
+          setCheckedHabits({
+            noPhone30Min: false,
+            workBeforeEnt: false,
+            boredomTraining: false,
+            exercise: false,
+            noPornBefore8: false,
+            noPhoneToilet: false,
+            noPhoneEating: false
+          });
+          setNotes('');
+        } catch (err) {
+          setSyncStatus('Error');
+          triggerAlert("Save Error: " + err.message, "error");
+        }
+      };
+
+      // Handle Task creation (Task pool)
+      const handleAddTask = async (e) => {
+        e.preventDefault();
+        if (!newTaskText.trim() || !user) return;
+
+        const taskId = 'task_' + Date.now();
+        const payload = {
+          text: newTaskText.trim(),
+          completed: false,
+          createdAt: new Date().toISOString(),
+          completedAt: null
+        };
+
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', taskId);
+          await setDoc(docRef, payload);
+          setNewTaskText('');
+          triggerAlert("Task Added & Synced!", "success");
+        } catch (err) {
+          triggerAlert("Task Error: " + err.message, "error");
+        }
+      };
+
+      // Toggle Task Completion State with Sajan's automatic day linking
+      const handleToggleTask = async (task) => {
+        if (!user) return;
+        const newCompletedState = !task.completed;
+        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', task.id);
+
+        try {
+          await setDoc(docRef, {
+            completed: newCompletedState,
+            completedAt: newCompletedState ? formDate : null
+          }, { merge: true });
+          
+          if (newCompletedState) {
+            triggerAlert("Task marked as completed today!", "success");
+          } else {
+            triggerAlert("Task reset to pending.", "success");
+          }
+        } catch (err) {
+          triggerAlert("Toggle Error: " + err.message, "error");
+        }
+      };
+
+      // Delete Task completely
+      const handleDeleteTask = async (taskId) => {
+        if (!user) return;
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'tasks', taskId);
+          await deleteDoc(docRef);
+          triggerAlert("Task removed", "success");
+        } catch (err) {
+          triggerAlert("Error: " + err.message, "error");
+        }
+      };
+
+      // Handle Weekly Sunday Review Saving
+      const handleSaveWeekly = async (e) => {
+        e.preventDefault();
+        if (!user) return;
+        setSyncStatus('Syncing');
+
+        const payload = {
+          avgScreenTime: parseFloat(avgScreenTime),
+          pornRelapses: parseInt(pornRelapses),
+          reviewWorkHours: parseFloat(reviewWorkHours),
+          newTuitionStudents: parseInt(newTuitionStudents),
+          clientLeads: parseInt(clientLeads),
+          sundayWeight: parseFloat(sundayWeight),
+          biggestWin,
+          biggestFailure,
+          nextWeekAdjustment,
+          timestamp: new Date().toISOString()
+        };
+
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'weeklyReviews', sundayDate);
+          await setDoc(docRef, payload, { merge: true });
+          setSyncStatus('Synced');
+          triggerAlert(`Sunday Review Synced for week of ${sundayDate}!`, "success");
+
+          // Clean textareas
+          setBiggestWin('');
+          setBiggestFailure('');
+          setNextWeekAdjustment('');
+        } catch (err) {
+          setSyncStatus('Error');
+          triggerAlert("Save Error: " + err.message, "error");
+        }
+      };
+
+      // Edit Log Trigger (Fills form & brings Sajan back to top of Dashboard)
+      const handleEditLog = (log) => {
+        setFormDate(log.id);
+        setCheckedHabits({
+          noPhone30Min: log.checkedHabits?.noPhone30Min || false,
+          workBeforeEnt: log.checkedHabits?.workBeforeEnt || false,
+          boredomTraining: log.checkedHabits?.boredomTraining || false,
+          exercise: log.checkedHabits?.exercise || false,
+          noPornBefore8: log.checkedHabits?.noPornBefore8 || false,
+          noPhoneToilet: log.checkedHabits?.noPhoneToilet || false,
+          noPhoneEating: log.checkedHabits?.noPhoneEating || false
+        });
+        setScreenTime(log.screenTime || 9);
+        setPornCount(log.pornCount || 0);
+        setFocusedWorkHours(log.focusedWorkHours || 4.5);
+        setWeight(log.weight || 110.0);
+        setNotes(log.notes || '');
+        setActiveTab('dashboard');
+        triggerAlert("Loaded! See form at top of dashboard", "success");
+      };
+
+      // Delete Log Trigger
+      const handleDeleteLog = async (logId) => {
+        if (!user) return;
+        setSyncStatus('Syncing');
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'dailyLogs', logId);
+          await deleteDoc(docRef);
+          setSyncStatus('Synced');
+          triggerAlert("Deleted Log Successfully", "success");
+        } catch (e) {
+          setSyncStatus('Error');
+          triggerAlert("Delete error: " + e.message, "error");
+        }
+      };
+
+      // Delete Weekly Review Trigger
+      const handleDeleteReview = async (reviewId) => {
+        if (!user) return;
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'weeklyReviews', reviewId);
+          await deleteDoc(docRef);
+          triggerAlert("Deleted Review Successfully", "success");
+        } catch (e) {
+          triggerAlert("Delete error: " + e.message, "error");
+        }
+      };
+
+      if (loading) {
+        return (
+          <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+            <div className="text-center space-y-4">
+              <div className="w-12 h-12 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <p className="text-xs text-neutral-400 font-mono tracking-widest uppercase">Initializing Sajan's Command Center...</p>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen bg-neutral-950 text-slate-100 flex flex-col justify-between">
+          
+          {/* Sajan Header */}
+          <header className="border-b border-neutral-900 bg-neutral-950 sticky top-0 z-40 px-4 py-4">
+            <div className="max-w-4xl mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded bg-gradient-to-tr from-neutral-800 to-neutral-900 border border-neutral-700 flex items-center justify-center">
+                  <span className="serif-title font-bold text-lg text-[#D4AF37]">S</span>
+                </div>
+                <div>
+                  <h1 className="serif-title font-bold text-lg tracking-wider text-white">SAJAN'S RECOVERY</h1>
+                  <p className="text-[10px] text-neutral-500 font-mono tracking-widest uppercase">Discipline Over Motivation</p>
+                </div>
+              </div>
+
+              {/* Real-time Status node */}
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center gap-1 px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase border ${
+                  syncStatus === 'Synced' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                  syncStatus === 'Syncing' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse' :
+                  'bg-neutral-900 text-neutral-500 border-neutral-800'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${syncStatus === 'Synced' ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                  {syncStatus}
+                </span>
+              </div>
+            </div>
+          </header>
+
+          {/* Sajan Banner Quote */}
+          <div className="bg-neutral-950 border-b border-neutral-900 py-3 px-4">
+            <div className="max-w-4xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-center sm:text-left">
+              <span className="serif-title font-semibold text-xs tracking-wider text-[#D4AF37]">
+                “Learn to sit with discomfort. Everything else follows.”
+              </span>
+              <span className="text-[10px] text-neutral-500 font-mono uppercase tracking-widest">
+                30-Day Recovery Mission: "From Escaping Life to Building Life"
+              </span>
+            </div>
+          </div>
+
+          {/* Core Content Layout */}
+          <main className="max-w-4xl w-full mx-auto px-4 py-6 flex-grow space-y-6">
+            
+            {/* Alert Display */}
+            {successMsg && (
+              <div className="p-3.5 bg-neutral-900 border border-emerald-500/20 text-emerald-400 text-xs font-mono flex items-center gap-2">
+                <span className="text-emerald-500 font-bold">✓</span> {successMsg}
+              </div>
+            )}
+            {errorMsg && (
+              <div className="p-3.5 bg-neutral-900 border border-rose-500/20 text-rose-400 text-xs font-mono">
+                ⚠️ {errorMsg}
+              </div>
+            )}
+
+            {/* Quick Actions / Panic Block */}
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setIsUrgeModalOpen(true)}
+                className="flex-1 min-w-[200px] bg-neutral-900 border border-amber-500/30 text-[#D4AF37] p-3 rounded-lg flex items-center justify-between gap-3 font-mono hover:bg-neutral-800 transition gold-pulse"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icons.ShieldAlert />
+                  <span className="text-xs uppercase tracking-widest font-bold">EMERGENCY URGE PROTOCOL</span>
+                </div>
+                <span className="text-[10px] bg-amber-500/10 px-2 py-0.5 rounded text-amber-300">Tap Now</span>
+              </button>
+            </div>
+
+            {/* TABS VIEW CONTROLLER */}
+            {activeTab === 'dashboard' && (
+              <div className="space-y-6">
+                
+                {/* 2-COLUMN PREMIUM WORK GRID (Logging left / Intelligently managed task pool right) */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  
+                  {/* Left Side: Daily Logger (7 columns) */}
+                  <div className="lg:col-span-7 space-y-6">
+                    <section className="bg-neutral-900 border border-neutral-850 rounded-lg p-5 relative overflow-hidden shadow-xl">
+                      <div className="absolute top-0 left-0 right-0 h-[2px] bg-[#D4AF37]"></div>
+                      
+                      <div className="flex justify-between items-center mb-5 border-b border-neutral-800 pb-3">
+                        <div>
+                          <h2 className="serif-title font-bold text-sm tracking-wider text-white">LOG DAILY RECOVERY METRICS</h2>
+                          <p className="text-[10px] text-neutral-500 font-mono uppercase tracking-widest mt-0.5">Select date, check items, record variables</p>
+                        </div>
+                        <div className="text-[#D4AF37]"><Icons.History /></div>
+                      </div>
+
+                      <form onSubmit={handleSaveDaily} className="space-y-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-2">TARGET DATE</label>
+                            <input 
+                              type="date"
+                              value={formDate}
+                              onChange={(e) => setFormDate(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-2">WEIGHT RECORD (KG)</label>
+                            <input 
+                              type="number" step="0.1"
+                              value={weight}
+                              onChange={(e) => setWeight(parseFloat(e.target.value))}
+                              className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        {/* Checklist */}
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-3">DAILY CHECKLIST (Score out of 7)</label>
+                          <div className="grid grid-cols-1 gap-2">
+                            {checklistItems.map((item) => {
+                              const isChecked = checkedHabits[item.id];
+                              return (
+                                <button
+                                  type="button"
+                                  key={item.id}
+                                  onClick={() => setCheckedHabits({ ...checkedHabits, [item.id]: !isChecked })}
+                                  className={`flex items-start gap-3 p-3 text-left rounded border transition ${
+                                    isChecked 
+                                      ? 'bg-amber-500/5 border-[#D4AF37]/50 text-white' 
+                                      : 'bg-neutral-950/40 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                                  }`}
+                                >
+                                  <span className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center text-[10px] shrink-0 ${
+                                    isChecked ? 'bg-[#D4AF37] border-[#D4AF37] text-neutral-950 font-bold' : 'border-neutral-700'
+                                  }`}>
+                                    {isChecked && '✓'}
+                                  </span>
+                                  <span className="text-xs leading-tight font-mono">{item.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Numeric stats parameters */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[9px] font-mono uppercase tracking-widest text-neutral-400 mb-2">SCREEN TIME (HOURS)</label>
+                            <input 
+                              type="number" step="0.1" min="0" max="24"
+                              value={screenTime}
+                              onChange={(e) => setScreenTime(parseFloat(e.target.value))}
+                              className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-mono uppercase tracking-widest text-neutral-400 mb-2">PORN RELAPSE COUNT</label>
+                            <input 
+                              type="number" min="0" max="20"
+                              value={pornCount}
+                              onChange={(e) => setPornCount(parseInt(e.target.value))}
+                              className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-mono uppercase tracking-widest text-neutral-400 mb-2">FOCUSED WORK HOURS</label>
+                            <input 
+                              type="number" step="0.5" min="0" max="24"
+                              value={focusedWorkHours}
+                              onChange={(e) => setFocusedWorkHours(parseFloat(e.target.value))}
+                              className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        {/* Reflections */}
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-2">DAILY REFLECTIONS & ACTIONS</label>
+                          <textarea
+                            rows="2"
+                            placeholder="Insights, triggers encountered, work wins, or boredom observations..."
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#D4AF37] resize-none placeholder-neutral-600"
+                          />
+                        </div>
+
+                        <div className="flex gap-2 justify-end pt-1">
+                          <button
+                            type="submit"
+                            className="w-full px-6 py-3 gold-gradient-btn text-neutral-950 font-bold text-xs uppercase tracking-wider rounded transition"
+                          >
+                            Save & Sync Daily Progress
+                          </button>
+                        </div>
+                      </form>
+                    </section>
+                  </div>
+
+                  {/* Right Side: Carry-over Smart Tasks Pool (5 columns) */}
+                  <div className="lg:col-span-5 space-y-6">
+                    <section className="bg-neutral-900 border border-neutral-850 rounded-lg p-5 relative overflow-hidden shadow-xl">
+                      <div className="absolute top-0 left-0 right-0 h-[2px] bg-[#D4AF37]"></div>
+                      
+                      <div className="flex justify-between items-center mb-4 border-b border-neutral-800 pb-3">
+                        <div>
+                          <h2 className="serif-title font-bold text-sm tracking-wider text-white">CARRY-OVER TASKS</h2>
+                          <p className="text-[10px] text-neutral-500 font-mono uppercase tracking-widest mt-0.5">Stays if incomplete. Cleared next day if done.</p>
+                        </div>
+                        <div className="text-[#D4AF37]"><Icons.Tasklist /></div>
+                      </div>
+
+                      {/* Add task form */}
+                      <form onSubmit={handleAddTask} className="flex gap-2 mb-4">
+                        <input
+                          type="text"
+                          placeholder="Outreach 5 CA Clients, Prepare Tuition Class..."
+                          value={newTaskText}
+                          onChange={(e) => setNewTaskText(e.target.value)}
+                          className="flex-grow bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37]"
+                          required
+                        />
+                        <button
+                          type="submit"
+                          className="px-3 bg-neutral-800 hover:bg-[#D4AF37] hover:text-neutral-950 border border-neutral-700 text-white font-bold text-xs rounded transition flex items-center justify-center"
+                        >
+                          <Icons.Plus />
+                        </button>
+                      </form>
+
+                      {/* Active tasks area */}
+                      <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                        {activeTasks.length === 0 ? (
+                          <div className="text-center py-8 bg-neutral-950/50 border border-neutral-850 rounded">
+                            <span className="text-xl">📋</span>
+                            <p className="text-[11px] text-neutral-500 font-mono uppercase mt-1">Task list is currently empty</p>
+                          </div>
+                        ) : (
+                          activeTasks.map((task) => (
+                            <div 
+                              key={task.id}
+                              className={`flex justify-between items-center gap-3 p-3 rounded border text-xs transition ${
+                                task.completed 
+                                  ? 'bg-neutral-950/80 border-emerald-500/20 text-neutral-500 line-through' 
+                                  : 'bg-neutral-950 border-neutral-800 text-neutral-200'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-grow">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleTask(task)}
+                                  className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] shrink-0 transition ${
+                                    task.completed 
+                                      ? 'bg-emerald-500 border-emerald-500 text-neutral-950 font-bold' 
+                                      : 'border-neutral-700 hover:border-neutral-600'
+                                  }`}
+                                >
+                                  {task.completed && '✓'}
+                                </button>
+                                <span className="truncate break-all">{task.text}</span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTask(task.id)}
+                                className="text-neutral-600 hover:text-rose-400 transition"
+                              >
+                                <Icons.Trash />
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Explanation box */}
+                      <div className="mt-4 bg-neutral-950 p-3 rounded border border-neutral-800 text-[10px] text-neutral-500 font-mono leading-relaxed">
+                        ⚡ <strong className="text-neutral-400 uppercase">Task Pool Principle:</strong> Tasks remain in this pool across days. Once marked complete, they show up checked on <span className="text-[#D4AF37] font-bold">{formDate}</span>, but disappear automatically when you view any other date.
+                      </div>
+                    </section>
+                  </div>
+
+                </div>
+
+                {/* 2. CORE STATS ROW */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-lg">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 block mb-1">STREAK ALIVE</span>
+                    <span className="text-xl font-bold text-white mono-num">{overviewStats.streak} Days 🔥</span>
+                  </div>
+                  <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-lg">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 block mb-1">AVG DAILY WORK</span>
+                    <span className="text-xl font-bold text-[#D4AF37] mono-num">{overviewStats.avgWork} Hrs</span>
+                  </div>
+                  <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-lg">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 block mb-1">AVG SCREEN TIME</span>
+                    <span className="text-xl font-bold text-white mono-num">{overviewStats.avgScreen} Hrs</span>
+                  </div>
+                  <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-lg">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 block mb-1">CURRENT WEIGHT</span>
+                    <span className="text-xl font-bold text-amber-500 mono-num">{overviewStats.currentWeight} KG</span>
+                  </div>
+                </div>
+
+                {/* 3. SAJAN PROFILE SPECIFICATIONS */}
+                <section className="bg-neutral-900 border border-neutral-800 rounded-lg p-5">
+                  <div className="flex items-center gap-2 mb-4 border-b border-neutral-800 pb-2">
+                    <Icons.SajanProfile />
+                    <h3 className="serif-title font-bold text-xs tracking-wider text-[#D4AF37]">SYSTEM PROFILE: SAJAN</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Bio parameters */}
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-mono uppercase text-neutral-500 tracking-wider">Parameters</h4>
+                      <div className="text-xs space-y-1 bg-neutral-950 p-3 rounded border border-neutral-800/60 font-mono">
+                        <div className="flex justify-between"><span>Age:</span> <span className="text-white">25</span></div>
+                        <div className="flex justify-between"><span>Height:</span> <span className="text-white">6 Ft</span></div>
+                        <div className="flex justify-between"><span>Weight:</span> <span className="text-rose-400">110 Kg</span></div>
+                        <div className="flex justify-between"><span>Target:</span> <span className="text-emerald-400">80 Kg</span></div>
+                        <div className="flex justify-between"><span>Profession:</span> <span className="text-white">CA</span></div>
+                        <div className="flex justify-between"><span>Income:</span> <span className="text-amber-300">₹5,000/mo</span></div>
+                      </div>
+                    </div>
+
+                    {/* Sajan's Target Goals */}
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-mono uppercase text-neutral-500 tracking-wider">Self-Mastery Goals</h4>
+                      <ul className="text-xs space-y-1 text-neutral-300">
+                        <li className="flex items-center gap-2">⏱ <span className="text-neutral-400">Build tuition business</span></li>
+                        <li className="flex items-center gap-2">💼 <span className="text-neutral-400">Build foreign client base</span></li>
+                        <li className="flex items-center gap-2">💪 <span className="text-neutral-400">Lose weight (Target 80 kg)</span></li>
+                        <li className="flex items-center gap-2">📱 <span className="text-neutral-400">Reduce phone addiction</span></li>
+                        <li className="flex items-center gap-2">🛡 <span className="text-neutral-400">Overcome porn addiction</span></li>
+                        <li className="flex items-center gap-2">🔥 <span className="text-neutral-400">Improve execution consistency</span></li>
+                      </ul>
+                    </div>
+
+                    {/* Sajan's current cycle insight */}
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-mono uppercase text-neutral-500 tracking-wider">Root Insight Protocol</h4>
+                      <div className="bg-neutral-950 p-3.5 rounded border border-neutral-800 text-xs text-neutral-400 leading-relaxed">
+                        The problem is <span className="text-white font-bold">constant stimulation dependence</span>, not capability. Your mission is learning to tolerate boredom and escape loops.
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+              </div>
+            )}
+
+            {/* TAB 2: DETAILED HISTORY LOGS */}
+            {activeTab === 'history' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center border-b border-neutral-900 pb-4">
+                  <div>
+                    <h2 className="serif-title font-bold text-lg tracking-wider text-white">DAY-WISE HISTORICAL LOGS</h2>
+                    <p className="text-[10px] text-neutral-500 font-mono uppercase tracking-widest mt-0.5">Chronological progress timeline of the 30-day mission</p>
+                  </div>
+                  <button 
+                    onClick={() => setActiveTab('dashboard')}
+                    className="px-4 py-2 border border-neutral-800 hover:border-neutral-700 text-xs font-mono uppercase text-neutral-300 transition"
+                  >
+                    + Back to entry
+                  </button>
+                </div>
+
+                {/* Logs Listing */}
+                <div className="space-y-4">
+                  {sortedLogs.length === 0 ? (
+                    <div className="text-center py-16 bg-neutral-900/50 border border-neutral-800 border-dashed rounded-lg">
+                      <span className="text-2xl">📭</span>
+                      <h3 className="serif-title font-bold text-xs tracking-wider text-neutral-400 mt-2">No historical log entries saved</h3>
+                      <p className="text-xs text-neutral-600 mt-1 max-w-xs mx-auto">Please record daily tracking variables on the Dashboard page to populate your database timeline.</p>
+                    </div>
+                  ) : (
+                    sortedLogs.map((log) => {
+                      const dailyChecklistPercent = Math.round((log.score / 7) * 100);
+                      return (
+                        <div key={log.id} className="bg-neutral-900 border border-neutral-800 rounded-lg p-5 space-y-4 hover:border-neutral-700 transition">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 pb-3">
+                            <div className="flex items-center gap-3">
+                              <span className="serif-title font-bold text-sm text-[#D4AF37] tracking-wider">
+                                {new Date(log.id).toLocaleDateString('en-US', {
+                                  weekday: 'short',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  timeZone: 'UTC'
+                                })}
+                              </span>
+                              <span className="text-xs font-mono text-neutral-500">(Logged on date ID: {log.id})</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-neutral-950 border border-neutral-800">
+                                Checklist: <span className="text-[#D4AF37] font-bold">{log.score || 0}/7</span>
+                              </span>
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-neutral-950 border border-neutral-800 text-rose-400">
+                                Relapses: {log.pornCount || 0}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Stat indicators */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-neutral-950/40 p-3 rounded border border-neutral-800/50">
+                            <div>
+                              <span className="text-neutral-500 block text-[10px] font-mono font-bold uppercase">SCREEN TIME</span>
+                              <span className="text-white font-bold">{log.screenTime} Hrs</span>
+                            </div>
+                            <div>
+                              <span className="text-neutral-500 block text-[10px] font-mono font-bold uppercase">FOCUSED WORK</span>
+                              <span className="text-[#D4AF37] font-bold">{log.focusedWorkHours} Hrs</span>
+                            </div>
+                            <div>
+                              <span className="text-neutral-500 block text-[10px] font-mono font-bold uppercase">RECORDED WEIGHT</span>
+                              <span className="text-amber-500 font-bold">{log.weight} KG</span>
+                            </div>
+                            <div>
+                              <span className="text-neutral-500 block text-[10px] font-mono font-bold uppercase">PERFORMANCE RATE</span>
+                              <span className="text-emerald-400 font-bold">{dailyChecklistPercent}%</span>
+                            </div>
+                          </div>
+
+                          {/* Individual check checklist breakdown */}
+                          <div className="space-y-1.5">
+                            <span className="text-[9px] font-mono text-neutral-500 tracking-wider uppercase block">Checklist Execution Matrix</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {checklistItems.map((item) => {
+                                const checked = log.checkedHabits?.[item.id];
+                                return (
+                                  <span 
+                                    key={item.id} 
+                                    className={`text-[9px] px-2 py-0.5 rounded font-mono ${
+                                      checked 
+                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                        : 'bg-neutral-950 text-neutral-600 border border-neutral-900'
+                                    }`}
+                                  >
+                                    {checked ? '✓' : '✗'} {item.label.split('(')[0].trim().slice(0, 18)}...
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Notes view */}
+                          {log.notes && (
+                            <div className="bg-neutral-950 p-3 rounded border border-neutral-800/50 text-xs text-neutral-300 italic leading-relaxed">
+                              "{log.notes}"
+                            </div>
+                          )}
+
+                          {/* Edit/Delete Actions */}
+                          <div className="flex justify-end gap-2 border-t border-neutral-850 pt-3">
+                            <button
+                              onClick={() => handleEditLog(log)}
+                              className="text-[10px] font-mono uppercase bg-neutral-800 hover:bg-neutral-750 text-neutral-300 px-3 py-1 rounded"
+                            >
+                              Edit Entry
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm("Confirm delete log for " + log.id + "?")) {
+                                  handleDeleteLog(log.id);
+                                }
+                              }}
+                              className="text-[10px] font-mono uppercase bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-3 py-1 rounded"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: WEEKLY SUNDAY REVIEWS */}
+            {activeTab === 'sunday-review' && (
+              <div className="space-y-6">
+                
+                {/* Weekly sunday review form */}
+                <section className="bg-neutral-900 border border-neutral-800 rounded-lg p-5 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-[#D4AF37]"></div>
+                  
+                  <div className="flex justify-between items-center mb-4 border-b border-neutral-800 pb-3">
+                    <div>
+                      <h2 className="serif-title font-bold text-sm tracking-wider text-white">RECORD SUNDAY WEEKLY REVIEW</h2>
+                      <p className="text-[10px] text-neutral-500 font-mono uppercase tracking-widest mt-0.5">Evaluate metrics weekly to recalibrate execution parameters</p>
+                    </div>
+                    <div className="text-[#D4AF37]"><Icons.SundayReview /></div>
+                  </div>
+
+                  <form onSubmit={handleSaveWeekly} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-1.5">Review Date (Sunday)</label>
+                        <input 
+                          type="date"
+                          value={sundayDate}
+                          onChange={(e) => setSundayDate(e.target.value)}
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-1.5">Avg Screen Time (Hrs)</label>
+                        <input 
+                          type="number" step="0.1"
+                          value={avgScreenTime}
+                          onChange={(e) => setAvgScreenTime(parseFloat(e.target.value))}
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-1.5">Porn Relapses Count</label>
+                        <input 
+                          type="number"
+                          value={pornRelapses}
+                          onChange={(e) => setPornRelapses(parseInt(e.target.value))}
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-1.5">Weekly Focused Work</label>
+                        <input 
+                          type="number" step="0.5"
+                          value={reviewWorkHours}
+                          onChange={(e) => setReviewWorkHours(parseFloat(e.target.value))}
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-1.5">New Tuition Students</label>
+                        <input 
+                          type="number"
+                          value={newTuitionStudents}
+                          onChange={(e) => setNewTuitionStudents(parseInt(e.target.value))}
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-1.5">Client Leads Generated</label>
+                        <input 
+                          type="number"
+                          value={clientLeads}
+                          onChange={(e) => setClientLeads(parseInt(e.target.value))}
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-1.5">Recorded Weight</label>
+                        <input 
+                          type="number" step="0.1"
+                          value={sundayWeight}
+                          onChange={(e) => setSundayWeight(parseFloat(e.target.value))}
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] font-mono"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-1">Biggest Success / Win This Week</label>
+                        <textarea 
+                          rows="1.5"
+                          value={biggestWin}
+                          onChange={(e) => setBiggestWin(e.target.value)}
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] resize-none text-xs"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-1">Biggest Failure / Trigger Hit</label>
+                        <textarea 
+                          rows="1.5"
+                          value={biggestFailure}
+                          onChange={(e) => setBiggestFailure(e.target.value)}
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] resize-none text-xs"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-widest text-neutral-400 mb-1">Weekly Adjustments & Tactics For Next Week</label>
+                        <textarea 
+                          rows="1.5"
+                          value={nextWeekAdjustment}
+                          onChange={(e) => setNextWeekAdjustment(e.target.value)}
+                          className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-[#D4AF37] resize-none text-xs"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="submit"
+                        className="px-6 py-2.5 gold-gradient-btn text-neutral-950 font-bold text-xs uppercase tracking-wider rounded transition"
+                      >
+                        Save & Sync Sunday Review
+                      </button>
+                    </div>
+                  </form>
+                </section>
+
+                {/* Sunday reviews historical records timeline */}
+                <div className="space-y-4">
+                  <h3 className="serif-title font-bold text-xs text-neutral-300 tracking-wider">Historical Sunday Reviews</h3>
+                  {sortedReviews.length === 0 ? (
+                    <div className="text-center py-10 bg-neutral-900/30 border border-neutral-850 rounded-lg">
+                      <p className="text-xs text-neutral-500 font-mono uppercase">No sunday reviews logged yet</p>
+                    </div>
+                  ) : (
+                    sortedReviews.map((review) => (
+                      <div key={review.id} className="bg-neutral-900 border border-neutral-800 rounded-lg p-5 space-y-4">
+                        <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+                          <span className="serif-title font-bold text-xs text-[#D4AF37] tracking-wider">Week of: {review.id}</span>
+                          <button
+                            onClick={() => {
+                              if (window.confirm("Delete Sunday review for " + review.id + "?")) {
+                                handleDeleteReview(review.id);
+                              }
+                            }}
+                            className="text-neutral-500 hover:text-rose-400 transition"
+                          >
+                            <Icons.Trash />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 text-xs bg-neutral-950/40 p-3 rounded border border-neutral-800/40 font-mono">
+                          <div>
+                            <span className="text-neutral-500 block text-[9px]">AVG SCREEN TIME</span>
+                            <span className="text-white">{review.avgScreenTime} Hrs</span>
+                          </div>
+                          <div>
+                            <span className="text-neutral-500 block text-[9px]">PORN RELAPSES</span>
+                            <span className="text-rose-400">{review.pornRelapses}</span>
+                          </div>
+                          <div>
+                            <span className="text-neutral-500 block text-[9px]">WEEKLY WORK</span>
+                            <span className="text-white">{review.reviewWorkHours} Hrs</span>
+                          </div>
+                          <div>
+                            <span className="text-neutral-500 block text-[9px]">NEW STUDENTS</span>
+                            <span className="text-[#D4AF37]">{review.newTuitionStudents}</span>
+                          </div>
+                          <div>
+                            <span className="text-neutral-500 block text-[9px]">CLIENT LEADS</span>
+                            <span className="text-[#D4AF37]">{review.clientLeads}</span>
+                          </div>
+                          <div>
+                            <span className="text-neutral-500 block text-[9px]">WEIGHT</span>
+                            <span className="text-white">{review.sundayWeight} KG</span>
+                          </div>
+                        </div>
+
+                        <div className="text-xs space-y-2">
+                          <div>
+                            <span className="text-[#D4AF37] font-bold block mb-0.5">★ Biggest Success:</span>
+                            <p className="text-neutral-300 pl-2 border-l border-neutral-800 italic">"{review.biggestWin}"</p>
+                          </div>
+                          <div>
+                            <span className="text-rose-400 font-bold block mb-0.5">✗ Biggest Failure / Trigger:</span>
+                            <p className="text-neutral-300 pl-2 border-l border-neutral-800 italic">"{review.biggestFailure}"</p>
+                          </div>
+                          <div>
+                            <span className="text-indigo-400 font-bold block mb-0.5">⚡ Tactics & Action For Next Week:</span>
+                            <p className="text-neutral-300 pl-2 border-l border-neutral-800 italic">"{review.nextWeekAdjustment}"</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+              </div>
+            )}
+
+          </main>
+
+          {/* EMERGENCY URGE PROTOCOL POPUP DIALOG */}
+          {isUrgeModalOpen && (
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <div className="bg-neutral-900 border border-amber-500 rounded-xl p-6 max-w-sm w-full space-y-5 text-center relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500 animate-pulse"></div>
+                
+                <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto text-amber-400">
+                  <Icons.ShieldAlert />
+                </div>
+
+                <div>
+                  <h3 className="serif-title font-bold text-base text-white tracking-widest uppercase">URGE ACTION PROTOCOL</h3>
+                  <p className="text-[10px] text-neutral-400 font-mono tracking-widest uppercase mt-1">Do not negotiate. Do not think. Execute.</p>
+                </div>
+
+                <div className="text-left space-y-3 bg-neutral-950 p-4 rounded border border-neutral-800">
+                  <div className="flex items-center gap-3 text-xs text-white">
+                    <span className="mono-num text-amber-400 font-bold bg-amber-500/10 w-6 h-6 rounded flex items-center justify-center border border-amber-500/20">1</span>
+                    <span>STAND UP IMMEDIATELY</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-white">
+                    <span className="mono-num text-amber-400 font-bold bg-amber-500/10 w-6 h-6 rounded flex items-center justify-center border border-amber-500/20">2</span>
+                    <span>LEAVE THE CURRENT ROOM</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-white">
+                    <span className="mono-num text-amber-400 font-bold bg-amber-500/10 w-6 h-6 rounded flex items-center justify-center border border-amber-500/20">3</span>
+                    <span>WALK FOR 5 MINUTES (NO DEVICES)</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-white">
+                    <span className="mono-num text-amber-400 font-bold bg-amber-500/10 w-6 h-6 rounded flex items-center justify-center border border-amber-500/20">4</span>
+                    <span>RETURN & IMMEDIATELY INITIATE TASK</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsUrgeModalOpen(false)}
+                  className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-750 text-neutral-200 rounded font-mono text-xs uppercase tracking-widest transition"
+                >
+                  I Have Executed The Protocol
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Premium Bottom Tab Navigation */}
+          <footer className="border-t border-neutral-900 bg-neutral-950/95 py-2.5 sticky bottom-0 left-0 right-0 z-40 backdrop-blur-md font-mono">
+            <div className="max-w-md mx-auto flex justify-around items-center">
+              <button 
+                onClick={() => setActiveTab('dashboard')}
+                className={`flex flex-col items-center p-2 transition ${activeTab === 'dashboard' ? 'text-[#D4AF37] scale-105' : 'text-neutral-500 hover:text-neutral-300'}`}
+              >
+                <Icons.Dashboard />
+                <span className="text-[10px] mt-1 tracking-wider uppercase font-bold">Dashboard</span>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('history')}
+                className={`flex flex-col items-center p-2 transition ${activeTab === 'history' ? 'text-[#D4AF37] scale-105' : 'text-neutral-500 hover:text-neutral-300'}`}
+              >
+                <Icons.History />
+                <span className="text-[10px] mt-1 tracking-wider uppercase font-bold">Logs</span>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('sunday-review')}
+                className={`flex flex-col items-center p-2 transition ${activeTab === 'sunday-review' ? 'text-[#D4AF37] scale-105' : 'text-neutral-500 hover:text-neutral-300'}`}
+              >
+                <Icons.SundayReview />
+                <span className="text-[10px] mt-1 tracking-wider uppercase font-bold">Sunday Review</span>
+              </button>
+            </div>
+          </footer>
+
+        </div>
+      );
+    }
+
+    const container = document.getElementById('root');
+    const root = ReactDOM.createRoot(container);
+    root.render(<App />);
+  </script>
+</body>
+</html>
