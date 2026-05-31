@@ -1,0 +1,625 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SyncProgress - Daily Tracker</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen selection:bg-indigo-500/30">
+
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import { initializeApp } from "firebase/app";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+    import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot } from "firebase/firestore";
+
+    const { useState, useEffect, useMemo } = React;
+
+    // SVG Icons
+    const Icons = {
+      Calendar: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      ),
+      History: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      Activity: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      ),
+      Settings: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      ),
+      CloudSync: ({ className }) => (
+        <svg className={className || "w-5 h-5"} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+        </svg>
+      ),
+      Plus: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+      ),
+      Check: () => (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      ),
+      Trash: () => (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      ),
+      Edit: () => (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      )
+    };
+
+    // Live Dedicated Cloud Database Configurations
+    const firebaseConfig = {
+      apiKey: "AIzaSyAs760Wd_X76b-PlE828XmYtcX03V_U5v4",
+      authDomain: "syncprogress-freedb.firebaseapp.com",
+      projectId: "syncprogress-freedb",
+      storageBucket: "syncprogress-freedb.appspot.com",
+      messagingSenderId: "847291048201",
+      appId: "1:847291048201:web:938bf726ad0192bc736a11"
+    };
+
+    const appId = 'production-user-space';
+
+    // Init App Services
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('dashboard');
+      const [user, setUser] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [syncStatus, setSyncStatus] = useState('Connecting');
+      const [errorMsg, setErrorMsg] = useState(null);
+      const [successMsg, setSuccessMsg] = useState(null);
+
+      // System master lists
+      const [logs, setLogs] = useState([]);
+      const [habits, setHabits] = useState(['Workout', 'Read Books', 'Sleep 8 Hours', 'No Sugar Intake', 'Meditation']);
+      const [newHabitInput, setNewHabitInput] = useState('');
+
+      // Form state
+      const getTodayString = () => {
+        const today = new Date();
+        const offset = today.getTimezoneOffset();
+        const localDate = new Date(today.getTime() - (offset * 60 * 1000));
+        return localDate.toISOString().split('T')[0];
+      };
+
+      const [formDate, setFormDate] = useState(getTodayString());
+      const [formMood, setFormMood] = useState(3);
+      const [formCompletedHabits, setFormCompletedHabits] = useState([]);
+      const [formFocusHours, setFormFocusHours] = useState(2);
+      const [formJournal, setFormJournal] = useState('');
+
+      // Show toast alerts
+      const triggerAlert = (msg, type = "success") => {
+        if (type === "success") {
+          setSuccessMsg(msg);
+          setTimeout(() => setSuccessMsg(null), 3500);
+        } else {
+          setErrorMsg(msg);
+          setTimeout(() => setErrorMsg(null), 4550);
+        }
+      };
+
+      // Realtime auth logic
+      useEffect(() => {
+        const connectAuth = async () => {
+          try {
+            setSyncStatus('Syncing');
+            await signInAnonymously(auth);
+          } catch (e) {
+            setSyncStatus('Error');
+            triggerAlert("Cloud Synchronization offline: " + e.message, "error");
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        connectAuth();
+        const unsub = onAuthStateChanged(auth, setUser);
+        return () => unsub();
+      }, []);
+
+      // Realtime data stream from database
+      useEffect(() => {
+        if (!user) return;
+        setSyncStatus('Syncing');
+
+        const pathRef = collection(db, 'progressTracker', appId, 'users', user.uid, 'dailyLogs');
+        const unsub = onSnapshot(pathRef, 
+          (snapshot) => {
+            const results = [];
+            snapshot.forEach((doc) => {
+              results.push({ id: doc.id, ...doc.data() });
+            });
+            setLogs(results);
+            setSyncStatus('Synced');
+          },
+          (err) => {
+            setSyncStatus('Error');
+            triggerAlert("Database error: " + err.message, "error");
+          }
+        );
+        return () => unsub();
+      }, [user]);
+
+      // Calculate state statistics safely in memory
+      const sortedLogs = useMemo(() => {
+        return [...logs].sort((a, b) => b.id.localeCompare(a.id));
+      }, [logs]);
+
+      const stats = useMemo(() => {
+        if (logs.length === 0) return { streak: 0, avgMood: 0, avgHabits: 0, totalEntries: 0 };
+        const totalMood = logs.reduce((sum, log) => sum + (log.mood || 0), 0);
+        const avgMood = (totalMood / logs.length).toFixed(1);
+
+        const ascDates = [...logs].map(l => l.id).sort();
+        let currentStreak = 0;
+        const todayStr = getTodayString();
+        const hasLogToday = ascDates.includes(todayStr);
+
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const hasLogYesterday = ascDates.includes(yesterdayStr);
+
+        if (hasLogToday || hasLogYesterday) {
+          let check = hasLogToday ? new Date() : yesterday;
+          let active = true;
+          while (active) {
+            const curStr = check.toISOString().split('T')[0];
+            if (ascDates.includes(curStr)) {
+              currentStreak++;
+              check.setDate(check.getDate() - 1);
+            } else {
+              active = false;
+            }
+          }
+        }
+
+        const totalHabits = logs.reduce((sum, log) => sum + (log.completedHabits?.length || 0), 0);
+        const avgHabits = (totalHabits / logs.length).toFixed(1);
+
+        return { streak: currentStreak, avgMood, avgHabits, totalEntries: logs.length };
+      }, [logs]);
+
+      // Save Log to Firestore
+      const handleSave = async (e) => {
+        e.preventDefault();
+        if (!user) return;
+        setSyncStatus('Syncing');
+
+        const payload = {
+          mood: parseInt(formMood),
+          completedHabits: formCompletedHabits,
+          focusHours: parseFloat(formFocusHours),
+          journal: formJournal,
+          updatedAt: new Date().toISOString()
+        };
+
+        try {
+          const docRef = doc(db, 'progressTracker', appId, 'users', user.uid, 'dailyLogs', formDate);
+          await setDoc(docRef, payload, { merge: true });
+          setSyncStatus('Synced');
+          triggerAlert(`Day logged successfully for ${formDate}!`, "success");
+
+          // Reset inputs
+          setFormMood(3);
+          setFormCompletedHabits([]);
+          setFormFocusHours(2);
+          setFormJournal('');
+        } catch (e) {
+          setSyncStatus('Error');
+          triggerAlert("Failed to sync log: " + e.message, "error");
+        }
+      };
+
+      const handleEdit = (log) => {
+        setFormDate(log.id);
+        setFormMood(log.mood || 3);
+        setFormCompletedHabits(log.completedHabits || []);
+        setFormFocusHours(log.focusHours || 0);
+        setFormJournal(log.journal || '');
+        setActiveTab('dashboard');
+        triggerAlert("Day loaded in top editor. Modify and save!");
+      };
+
+      const handleDelete = async (logId) => {
+        if (!user) return;
+        setSyncStatus('Syncing');
+        try {
+          const docRef = doc(db, 'progressTracker', appId, 'users', user.uid, 'dailyLogs', logId);
+          await deleteDoc(docRef);
+          setSyncStatus('Synced');
+          triggerAlert("Progress record deleted", "success");
+        } catch (e) {
+          setSyncStatus('Error');
+          triggerAlert("Delete error: " + e.message, "error");
+        }
+      };
+
+      if (loading) {
+        return (
+          <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+            <div className="text-center space-y-2">
+              <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <p className="text-xs text-slate-400 font-medium">Encrypting Local Secure Path...</p>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-between pb-24">
+          
+          {/* Header */}
+          <header className="border-b border-slate-800/60 bg-slate-950/80 sticky top-0 z-40 backdrop-blur-md">
+            <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/10">
+                  <Icons.Activity />
+                </div>
+                <div>
+                  <h1 className="font-bold text-base md:text-lg text-white">SyncProgress</h1>
+                  <p className="text-[11px] text-slate-400">Day-wise Realtime Sync Tracker</p>
+                </div>
+              </div>
+
+              <div>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+                  syncStatus === 'Synced' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                  syncStatus === 'Syncing' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse' :
+                  'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                }`}>
+                  <Icons.CloudSync className={syncStatus === 'Syncing' ? 'animate-spin w-3.5 h-3.5' : 'w-3.5 h-3.5'} />
+                  {syncStatus}
+                </span>
+              </div>
+            </div>
+          </header>
+
+          {/* Main Space */}
+          <main className="max-w-4xl w-full mx-auto px-4 py-6 flex-grow">
+            {successMsg && (
+              <div className="mb-4 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
+                ✓ {successMsg}
+              </div>
+            )}
+            {errorMsg && (
+              <div className="mb-4 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs📋">
+                ⚠️ {errorMsg}
+              </div>
+            )}
+
+            {activeTab === 'dashboard' && (
+              <div className="space-y-6">
+                
+                {/* 1. INPUT FORM ABOVE ALL */}
+                <section className="bg-slate-950/40 border border-slate-800 rounded-2xl p-5 relative overflow-hidden shadow-xl">
+                  <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-indigo-500 to-purple-600"></div>
+                  
+                  <div className="flex justify-between items-center mb-4">
+                    <div>
+                      <h2 className="text-base font-bold text-white">Log Day Metrics</h2>
+                      <p className="text-xs text-slate-400">Add checklist, journals & progress logs below.</p>
+                    </div>
+                    <div className="text-slate-500"><Icons.Calendar /></div>
+                  </div>
+
+                  <form onSubmit={handleSave} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Target Logging Date</label>
+                        <input 
+                          type="date"
+                          value={formDate}
+                          onChange={(e) => setFormDate(e.target.value)}
+                          className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Overall Energy/Mood</label>
+                        <div className="flex h-[42px] bg-slate-900/90 rounded-xl px-1 items-center border border-slate-700/80">
+                          {[1,2,3,4,5].map((lvl) => (
+                            <button
+                              type="button" key={lvl} onClick={() => setFormMood(lvl)}
+                              className={`flex-1 py-1.5 rounded-lg text-xs transition-all ${formMood === lvl ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:bg-slate-800/40'}`}
+                            >
+                              {lvl === 1 ? '😢' : lvl === 2 ? '🙁' : lvl === 3 ? '😐' : lvl === 4 ? '🙂' : '🤩'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Habits check */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Habits Accomplished ({formCompletedHabits.length} / {habits.length})</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {habits.map((h) => {
+                          const done = formCompletedHabits.includes(h);
+                          return (
+                            <button
+                              type="button" key={h}
+                              onClick={() => {
+                                if (done) setFormCompletedHabits(formCompletedHabits.filter(x => x !== h));
+                                else setFormCompletedHabits([...formCompletedHabits, h]);
+                              }}
+                              className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs border text-left truncate transition ${
+                                done ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400' : 'bg-slate-900/30 border-slate-800 text-slate-400 hover:border-slate-700'
+                              }`}
+                            >
+                              <span className={`w-3.5 h-3.5 rounded border text-[9px] flex items-center justify-center ${done ? 'bg-emerald-500 border-emerald-400 text-slate-950 font-bold' : 'border-slate-700'}`}>
+                                {done && '✓'}
+                              </span>
+                              <span className="truncate">{h}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Productive slider */}
+                    <div>
+                      <div className="flex justify-between items-center text-[10px] mb-1">
+                        <label className="text-slate-400 font-bold uppercase tracking-wider">Focus Allocation Score</label>
+                        <span className="text-indigo-400 font-bold text-xs">{formFocusHours} Hours</span>
+                      </div>
+                      <input 
+                        type="range" min="0" max="16" step="0.5" value={formFocusHours}
+                        onChange={(e) => setFormFocusHours(parseFloat(e.target.value))}
+                        className="w-full accent-indigo-500 h-1 bg-slate-900 rounded-lg cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Journal */}
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Accomplishments / Focus Notes</label>
+                      <textarea
+                        rows="2" placeholder="Describe highlights or adjustments made today..."
+                        value={formJournal} onChange={(e) => setFormJournal(e.target.value)}
+                        className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 resize-none"
+                      />
+                    </div>
+
+                    <div className="flex gap-2 justify-end pt-2">
+                      <button 
+                        type="button" onClick={() => { setFormMood(3); setFormCompletedHabits([]); setFormFocusHours(2); setFormJournal(''); }}
+                        className="px-3 py-2 text-xs text-slate-500 hover:text-slate-300"
+                      >
+                        Reset
+                      </button>
+                      <button 
+                        type="submit"
+                        className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold text-xs rounded-xl hover:from-indigo-600 hover:to-purple-700 flex items-center gap-1.5 shadow-md"
+                      >
+                        <Icons.CloudSync className="w-3.5 h-3.5" /> Sync Entry
+                      </button>
+                    </div>
+                  </form>
+                </section>
+
+                {/* STATS */}
+                <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-slate-950/20 border border-slate-800 p-3.5 rounded-xl text-center">
+                    <span className="text-[10px] text-slate-400 block mb-0.5">Current Streak</span>
+                    <span className="text-xl font-bold text-amber-400">{stats.streak} Days 🔥</span>
+                  </div>
+                  <div className="bg-slate-950/20 border border-slate-800 p-3.5 rounded-xl text-center">
+                    <span className="text-[10px] text-slate-400 block mb-0.5">Average Score</span>
+                    <span className="text-xl font-bold text-indigo-400">{stats.avgMood}/5</span>
+                  </div>
+                  <div className="bg-slate-950/20 border border-slate-800 p-3.5 rounded-xl text-center">
+                    <span className="text-[10px] text-slate-400 block mb-0.5">Avg Habits</span>
+                    <span className="text-xl font-bold text-emerald-400">{stats.avgHabits}/{habits.length}</span>
+                  </div>
+                  <div className="bg-slate-950/20 border border-slate-800 p-3.5 rounded-xl text-center">
+                    <span className="text-[10px] text-slate-400 block mb-0.5">Total Logs</span>
+                    <span className="text-xl font-bold text-white">{stats.totalEntries}</span>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {/* PROGRESS SUBPAGE */}
+            {activeTab === 'history' && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Day-wise Historical Logs</h2>
+                  <p className="text-xs text-slate-400">Chronological list view of your saved progress details.</p>
+                </div>
+
+                <div className="space-y-3">
+                  {sortedLogs.length === 0 ? (
+                    <div className="text-center py-12 bg-slate-950/20 border border-slate-800 border-dashed rounded-xl">
+                      <span className="text-2xl block mb-2">📭</span>
+                      <h4 className="text-xs font-semibold text-slate-300">No logs found on this user node</h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Save a day metric item in the first tab to view records here.</p>
+                    </div>
+                  ) : (
+                    sortedLogs.map((log) => {
+                      const perc = Math.round((log.completedHabits?.length || 0) / habits.length * 100) || 0;
+                      return (
+                        <div key={log.id} className="bg-slate-950/30 border border-slate-800/80 rounded-xl p-4 flex flex-col sm:flex-row justify-between gap-4">
+                          <div className="space-y-2 flex-grow">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-bold text-white bg-slate-900 px-2 py-0.5 border border-slate-800 rounded">
+                                {log.id}
+                              </span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 font-medium">
+                                {log.mood === 5 ? '🤩 Excel' : log.mood === 4 ? '🙂 Good' : log.mood === 3 ? '😐 Okay' : log.mood === 2 ? '🙁 Meh' : '😢 Bad'}
+                              </span>
+                              {log.focusHours > 0 && (
+                                <span className="text-[11px] text-slate-400 font-medium">{log.focusHours}h focus</span>
+                              )}
+                            </div>
+
+                            {log.journal && (
+                              <p className="text-xs text-slate-300 italic bg-slate-900/40 p-2.5 rounded border border-slate-800/60 leading-relaxed">
+                                {log.journal}
+                              </p>
+                            )}
+
+                            <div>
+                              <div className="flex justify-between items-center text-[10px] text-slate-500 mb-1">
+                                <span>Habit tracking rate: {log.completedHabits?.length || 0} / {habits.length}</span>
+                                <span>{perc}%</span>
+                              </div>
+                              <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden">
+                                <div className="bg-emerald-400 h-full rounded-full" style={{ width: `${perc}%` }}></div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex sm:flex-col justify-end items-end gap-2 border-t sm:border-t-0 border-slate-800/60 pt-2.5 sm:pt-0">
+                            <button 
+                              onClick={() => handleEdit(log)}
+                              className="text-[11px] font-bold text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/10 px-2.5 py-1 rounded-md transition"
+                            >
+                              Edit
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(log.id)}
+                              className="text-[11px] font-bold text-rose-400 bg-rose-500/5 hover:bg-rose-500/10 px-2.5 py-1 rounded-md transition"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* CONFIG SUBPAGE */}
+            {activeTab === 'settings' && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Tracked Checklist Habits</h2>
+                  <p className="text-xs text-slate-400">Add or clear custom checkboxes metrics.</p>
+                </div>
+
+                <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4 space-y-3">
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" placeholder="Add tracking item..." value={newHabitInput}
+                      onChange={(e) => setNewHabitInput(e.target.value)}
+                      className="flex-grow bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                    <button 
+                      onClick={() => {
+                        const v = newHabitInput.trim();
+                        if (v && !habits.includes(v)) {
+                          setHabits([...habits, v]);
+                          setNewHabitInput('');
+                          triggerAlert("Tracking metric added!");
+                        }
+                      }}
+                      className="px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition"
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                    {habits.map(h => (
+                      <div key={h} className="flex justify-between items-center bg-slate-900/40 border border-slate-800/80 px-3 py-1.5 rounded-lg text-xs">
+                        <span className="text-slate-300">{h}</span>
+                        <button onClick={() => setHabits(habits.filter(x => x !== h))} className="text-slate-500 hover:text-rose-400 px-1">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-4">
+                  <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Cloud Authentication Token</h3>
+                  <div className="bg-slate-900 p-3 rounded-lg text-[10px] text-slate-400 space-y-1 font-mono">
+                    <div className="truncate">Scope: {appId}</div>
+                    <div className="break-all">Secure UID: {user?.uid || 'Resolving security payload...'}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* Bottom Tabs Nav Bar */}
+          <footer className="border-t border-slate-800/80 bg-slate-950/90 py-2.5 sticky bottom-0 left-0 right-0 z-40 backdrop-blur-md">
+            <div className="max-w-md mx-auto flex justify-around items-center">
+              <button 
+                onClick={() => setActiveTab('dashboard')}
+                className={`flex flex-col items-center p-1.5 transition ${activeTab === 'dashboard' ? 'text-indigo-400 scale-105' : 'text-slate-400'}`}
+              >
+                <Icons.Calendar />
+                <span className="text-[10px] mt-0.5 font-medium">Dashboard</span>
+              </button>
+              <button 
+                onClick={() => setActiveTab('history')}
+                className={`flex flex-col items-center p-1.5 transition ${activeTab === 'history' ? 'text-indigo-400 scale-105' : 'text-slate-400'}`}
+              >
+                <Icons.History />
+                <span className="text-[10px] mt-0.5 font-medium">Progress</span>
+              </button>
+              <button 
+                onClick={() => setActiveTab('settings')}
+                className={`flex flex-col items-center p-1.5 transition ${activeTab === 'settings' ? 'text-indigo-400 scale-105' : 'text-slate-400'}`}
+              >
+                <Icons.Settings />
+                <span className="text-[10px] mt-0.5 font-medium">Settings</span>
+              </button>
+            </div>
+          </footer>
+
+        </div>
+      );
+    }
+
+    const container = document.getElementById('root');
+    const root = ReactDOM.createRoot(container);
+    root.render(<App />);
+  </script>
+</body>
+</html>
+
+
+```
